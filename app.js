@@ -51,7 +51,12 @@ app.use((error,req,res,next) => {
 
 mongoose.connect("mongodb://localhost:27017/messages",{ useNewUrlParser: true,useUnifiedTopology: true })
 .then(res => {
-    app.listen(8080);
+    const server = app.listen(8080);
+    /* websocet is over http and we explicity enable cors in second parameter */
+    const io = require("./socket").init(server);
+    io.on("connection", socket => {
+        console.log("Client connected!");
+    })
 })
 .catch(err => {
     err.statusCode = 500;

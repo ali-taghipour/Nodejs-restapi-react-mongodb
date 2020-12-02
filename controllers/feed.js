@@ -3,6 +3,7 @@ const {validationResult} = require("express-validator");
 const fs = require("fs");
 const path = require("path");
 const User = require("../models/user");
+const io = require("../socket");
 
 exports.getPosts = (req,res,next) => {
     const currentPage = req.query.page || 1;
@@ -13,6 +14,10 @@ exports.getPosts = (req,res,next) => {
     .then(count => {
         totalItems = count;
         return Post.find()
+        .populate("creator")
+        .sort({
+            createdAt:-1
+        })
         .skip((currentPage -1) * ITEM_PER_PAGE)
         .limit(ITEM_PER_PAGE)
     })
@@ -71,6 +76,10 @@ exports.createPost = (req,res,next) => {
         return user.save();
     })
     .then(result => {
+        io.getIO().emit("posts",{
+            action: "create",
+            post: {...post._doc,creator: {_id: req.userId,name: result.name}}
+        })
         res.status(201).json({
             message: "it has been saved!",
             post:post,
@@ -130,7 +139,7 @@ exports.updatePost = (req,res,next) => {
     }
 
 
-    Post.findById(postId)
+    Post.findById(postId).populate("creator")
     .then(post => {
         if(!post){
             const error = new Error("There is no such post!");
@@ -138,7 +147,7 @@ exports.updatePost = (req,res,next) => {
             throw error;
         }
 
-        if(post.creator.toString() !== req.userId){
+        if(post.creator._id.toString() !== req.userId){
             const error = new Error("UnAthenticated!");
             error.statusCode = 403;
             throw error;
@@ -156,6 +165,7 @@ exports.updatePost = (req,res,next) => {
         return post.save();   
     })
     .then(result => {
+        io.getIO().emit("posts",{action: "update",post:result})
         res.status(200).json({
             message: "Post updated",
             post:result
@@ -196,6 +206,7 @@ exports.deletePost = (req,res,next) => {
         return user.save();
     })
     .then(result => {
+        io.getIO().emit("posts",{action: "delete", post:postId})
         res.status(200).json({
             message: "Post has been deleted!"
         });
