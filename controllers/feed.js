@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const User = require("../models/user");
 const io = require("../socket");
+const user = require("../models/user");
 
 exports.getPosts = (req,res,next) => {
     const currentPage = req.query.page || 1;
@@ -38,7 +39,7 @@ exports.getPosts = (req,res,next) => {
      
 }
 
-exports.createPost = (req,res,next) => {
+exports.createPost = async (req,res,next) => {
     const title = req.body.title;
     const content = req.body.content;
     const image = req.file;
@@ -66,34 +67,30 @@ exports.createPost = (req,res,next) => {
         imageUrl: imageUrl,
         creator: req.userId 
     });
-    post.save()
-    .then(result => {
-        return User.findById(req.userId);
-    })
-    .then(user => {
+    try{
+        await post.save()
+        const user = await User.findById(req.userId);
         user.posts.push(post);
         creator = user;
-        return user.save();
-    })
-    .then(result => {
+        const updatedUser = await user.save();
         io.getIO().emit("posts",{
             action: "create",
-            post: {...post._doc,creator: {_id: req.userId,name: result.name}}
+            post: {...post._doc,creator: {_id: req.userId,name: updatedUser.name}}
         })
         res.status(201).json({
             message: "it has been saved!",
             post:post,
             creator: {userId: creator._id,name: creator.name}
         })
-    })
-    .catch(err => {
+        return updatedUser;
+    }catch(err){
         if(!err.statusCode === 500){
             err.statusCode = 500;
         }
         error.message = "An error was occured! we're on fixing that"
         next(err);
-    })
-    
+        return user;
+    }
 }
 
 exports.getPost = (req,res,next) => {
